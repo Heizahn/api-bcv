@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"crypto/tls"
 
 	"github.com/gocolly/colly/v2"
 	"github.com/gorilla/handlers"
@@ -31,6 +32,7 @@ func main() {
 	corsMethods := handlers.AllowedMethods([]string{"GET", "OPTIONS"})
 
 	// Iniciar servidor
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	updateBCV()
 	http.HandleFunc("/", handleResquest)
 	http.HandleFunc("/plans", handlePlansRequest)
