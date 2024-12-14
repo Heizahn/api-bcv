@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gocolly/colly/v2"
+	"github.com/gorilla/handlers"
 	"github.com/robfig/cron"
 )
 
@@ -24,13 +25,18 @@ func main() {
 	shedule.AddFunc("30 6 * * *", updateBCV)
 	shedule.Start()
 
+	//Cors
+	corsOrgin := handlers.AllowedOrigins([]string{"*"})
+	corsHeader := handlers.AllowedHeaders([]string{"Content-Type"})
+	corsMethods := handlers.AllowedMethods([]string{"GET", "OPTIONS"})
+
 	// Iniciar servidor
 	updateBCV()
 	http.HandleFunc("/", handleResquest)
 	http.HandleFunc("/plans", handlePlansRequest)
 	http.HandleFunc("/convert", handleConvertRequest)
 	fmt.Println("Servidor iniciado en http://localhost:8080")
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":8080", handlers.CORS(corsOrgin, corsHeader, corsMethods)(http.DefaultServeMux))
 }
 
 func handleResquest(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +107,11 @@ func fetchUSD() float64 {
 			return
 		}
 
-		usd = d
+		if d > 0 {
+			usd = d
+		} else {
+			fmt.Println("Error: No se pudo obtener el valor del dólar")
+		}
 	})
 
 	err := c.Visit("https://www.bcv.org.ve/")
