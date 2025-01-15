@@ -45,7 +45,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	defer bcvMutex.Unlock()
 
 	response := Response{
-		BCV: formatFloat(bcv),
+		BCV: bcv,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -141,7 +141,7 @@ type ConversionResponse struct {
 
 func formatFloat(f float64) float64 {
 	//Retornar un numero con 4 decimales
-	formateNum := fmt.Sprintf("%.4f", f)
+	formateNum := fmt.Sprintf("%.2f", f)
 
 	convertNum, err := strconv.ParseFloat(formateNum, 64)
 
