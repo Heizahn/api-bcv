@@ -1,156 +1,95 @@
 package main
 
 import (
-	"crypto/tls"
-	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-	"strconv"
-	"strings"
-	"sync"
 
-	"github.com/gocolly/colly/v2"
-	"github.com/gorilla/handlers"
-	"github.com/robfig/cron"
-)
+	// Importaciones de tus módulos
+	"precio-bcv-go/config"
+	"precio-bcv-go/handlers"
+	"precio-bcv-go/services"
 
-var (
-	bcvMutex sync.Mutex
-	bcv      float64
+	// Dependencias externas
+	gorillaHandlers "github.com/gorilla/handlers" // Alias para el paquete gorilla/handlers
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
-	// Iniciar cron para la conversión
-	shedule := cron.New()
-	shedule.AddFunc("0 30 6 * * *", updateBCV)
-	shedule.Start()
-
-	//Cors
-	corsOrigin := handlers.AllowedOrigins([]string{"*"})
-	corsHeader := handlers.AllowedHeaders([]string{"Content-Type"})
-	corsMethods := handlers.AllowedMethods([]string{"GET", "OPTIONS"})
-
-	// Iniciar servidor
-	updateBCV()
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	http.HandleFunc("/", handleRequest)
-	http.HandleFunc("/plans", handlePlansRequest)
-	http.HandleFunc("/convert", handleConvertRequest)
-	fmt.Println("Servidor iniciado")
-	http.ListenAndServe(":8080", handlers.CORS(corsOrigin, corsHeader, corsMethods)(http.DefaultServeMux))
-}
-
-func handleRequest(w http.ResponseWriter, r *http.Request) {
-	bcvMutex.Lock()
-	defer bcvMutex.Unlock()
-
-	response := Response{
-		BCV: bcv,
+	// --- 1. Cargar Configuración de la Aplicación ---
+	// Carga la configuración desde variables de entorno o el archivo .env.
+	// La función retornará la configuración o un error fatal si falta algo esencial.
+	appConfig, configLoadErr := config.LoadConfig() 
+	if configLoadErr != nil {
+		log.Fatalf("Error crítico al cargar la configuración de la aplicación: %v", configLoadErr)
 	}
+	log.Printf("Configuración cargada: Puerto=%s", appConfig.Port,)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func handlePlansRequest(w http.ResponseWriter, r *http.Request) {
-	bcvMutex.Lock()
-	defer bcvMutex.Unlock()
-
-	response := PlansResponse{
-		Price20: formatFloat((bcv * 20) * 1.08),
-		Price25: formatFloat((bcv * 25) * 1.08),
-		Price30: formatFloat((bcv * 30) * 1.08),
+	// --- 2. Inicializar Servicio de Base de Datos MongoDB ---
+	// Crea una instancia del servicio que gestiona la conexión y operaciones con MongoDB,
+	// pasándole la configuración necesaria (URI, nombres de DB/Colección).
+	mongoService, mongoServiceInitErr := services.NewMongoDBService(appConfig) 
+	if mongoServiceInitErr != nil {
+		// Si la conexión a MongoDB falla (ej. servidor no disponible, credenciales incorrectas),
+		// la aplicación no puede operar, por lo que se termina.
+		log.Fatalf("Error crítico: No se pudo inicializar el servicio de MongoDB: %v", mongoServiceInitErr)
 	}
+	// Asegura que la conexión a MongoDB se cierre de forma segura cuando la función main() finalice.
+	defer mongoService.Disconnect()
+	log.Println("Servicio de MongoDB inicializado y conexión establecida.")
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	// --- 3. Inicializar Servicio de Tasa de Cambio BCV ---
+	// Crea una instancia del servicio que se encarga de obtener y mantener el valor del BCV.
+	// Se le inyecta el 'mongoService' para que pueda guardar los valores en la base de datos.
+	whatsAppService := services.NewWhatsAppService(appConfig) // Pasa la configuración
+	log.Println("Servicio de WhatsApp inicializado.")
+
+	bcvPriceService := services.NewBCVService(mongoService, whatsAppService) // Renombrado: 'bcvService' -> 'bcvPriceService'
+	log.Println("Servicio de BCV inicializado.")
+
+	// --- 4. Realizar la Primera Actualización de la Tasa BCV al Arrancar el Servidor ---
+	// Esto asegura que tengamos un valor inicial del BCV disponible antes de que lleguen
+	// las primeras peticiones HTTP, consultando primero la base de datos o scrapeando.
+	bcvPriceService.UpdateBCV()
+	log.Printf("Valor inicial del BCV establecido: %.4f\n", bcvPriceService.GetBCV())
+
+	// --- 5. Configurar Tarea Programada (Cron) para la Actualización Diaria del BCV ---
+	// Crea un nuevo planificador de tareas cron.
+	dailyPriceScheduler := cron.New() // Renombrado: 'shedule' -> 'dailyPriceScheduler'
+	// Programa la función UpdateBCV() del servicio BCV para que se ejecute
+	// todos los días a las 01:30:00 AM (hora local del servidor donde se ejecuta la app).
+	dailyPriceScheduler.AddFunc("0 30 1 * * *", bcvPriceService.UpdateBCV)
+	dailyPriceScheduler.Start() // Inicia el planificador.
+	log.Println("Tarea programada (cron) para actualizar BCV diariamente a las 01:30 AM iniciada.")
+
+	// --- 6. Configurar CORS (Cross-Origin Resource Sharing) para la API ---
+	// Define las políticas de seguridad para permitir solicitudes de diferentes dominios.
+	// Por ahora, se permite cualquier origen, cabecera y método para simplificar el desarrollo.
+	// En producción, es crucial restringir esto a dominios específicos.
+	corsAllowedOrigins := gorillaHandlers.AllowedOrigins([]string{"*"})  
+	corsAllowedHeaders := gorillaHandlers.AllowedHeaders([]string{"Content-Type"}) 
+	corsAllowedMethods := gorillaHandlers.AllowedMethods([]string{"GET", "OPTIONS"}) 
+	log.Println("Configuración de CORS aplicada (permitiendo todos los orígenes para desarrollo).")
+
+	// --- 7. Inicializar Manejadores de Rutas API ---
+	// Crea una instancia de los manejadores HTTP que procesarán las solicitudes a las rutas de la API.
+	// Se le inyecta el 'bcvPriceService' para que los manejadores puedan acceder al valor del BCV.
+	apiRoutesHandlers := handlers.NewAPIHandlers(bcvPriceService) 
+	log.Println("Manejadores de API inicializados.")
+
+	// --- 8. Configurar Rutas HTTP y sus Manejadores ---
+	// Asigna cada URL de la API a su función manejadora correspondiente.
+	// Cada manejador es un método de la instancia 'apiRoutesHandlers'.
+	http.HandleFunc("/", apiRoutesHandlers.HandleRequest)
+	http.HandleFunc("/plans", apiRoutesHandlers.HandlePlansRequest)
+	http.HandleFunc("/convert", apiRoutesHandlers.HandleConvertRequest)
+	log.Println("Rutas HTTP configuradas.")
+
+	// --- 9. Iniciar Servidor HTTP ---
+	// Comienza a escuchar en el puerto configurado y a procesar las solicitudes entrantes.
+	// Se aplica la configuración de CORS a todas las rutas usando el multiplexor HTTP por defecto.
+	fmt.Printf("Servidor iniciado y escuchando en el puerto %s\n", appConfig.Port)
+	log.Fatal(http.ListenAndServe(":"+appConfig.Port, gorillaHandlers.CORS(corsAllowedOrigins, corsAllowedHeaders, corsAllowedMethods)(http.DefaultServeMux)))
+	// log.Fatal es una función que, si ListenAndServe retorna un error (ej. el puerto ya está en uso),
+	// imprime el error y termina la aplicación.
 }
-
-func handleConvertRequest(w http.ResponseWriter, r *http.Request) {
-	bcvMutex.Lock()
-	defer bcvMutex.Unlock()
-
-	amount, err := strconv.ParseFloat(r.URL.Query().Get("amount"), 64)
-	if err != nil {
-		http.Error(w, "Invalid amount parameter", http.StatusBadRequest)
-		return
-	}
-
-	response := ConversionResponse{
-		Conversion: formatFloat((amount * bcv) * 1.08),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func updateBCV() {
-	newBCV := fetchUSD()
-
-	bcvMutex.Lock()
-	bcv = newBCV
-	bcvMutex.Unlock()
-
-	fmt.Println("BCV actualizado:", bcv)
-}
-
-func fetchUSD() float64 {
-	c := colly.NewCollector()
-	var usd float64
-
-	c.OnHTML("#dolar", func(element *colly.HTMLElement) {
-		usdText := element.Text[101:108]
-		cleanedText := strings.ReplaceAll(usdText, ",", ".")
-
-		d, err := strconv.ParseFloat(cleanedText, 64)
-		if err != nil {
-			d = 97.4194
-			fmt.Println("Error:", err)
-			return
-		}
-
-		if d > 0 {
-			usd = d
-		} else {
-			fmt.Println("Error: No se pudo obtener el valor del dólar")
-		}
-	})
-
-	err := c.Visit("https://www.bcv.org.ve/")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return 97.4194
-	}
-
-	return usd
-}
-
-type Response struct {
-	BCV float64 `json:"bcv"`
-}
-
-type PlansResponse struct {
-	Price20 float64 `json:"price_20"`
-	Price25 float64 `json:"price_25"`
-	Price30 float64 `json:"price_30"`
-}
-
-type ConversionResponse struct {
-	Conversion float64 `json:"conversion"`
-}
-
-func formatFloat(f float64) float64 {
-	//Retornar un numero con 4 decimales
-	formateNum := fmt.Sprintf("%.2f", f)
-
-	convertNum, err := strconv.ParseFloat(formateNum, 64)
-
-	if err != nil {
-		fmt.Println("Error: ", err)
-		return 0.0
-	}
-
-	return convertNum
-}
-
-
