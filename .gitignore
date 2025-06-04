@@ -1,0 +1,27 @@
+# Archivos y directorios de Go
+/bin/
+/pkg/
+/src/
+*.exe
+*.test
+*.prof
+
+# Dependencias del módulo Go
+/vendor/
+go.sum
+
+# Variables de entorno
+.env
+.env.*
+!.env.example # Si tienes un archivo .env.example para mostrar la estructura
+
+# Entornos de desarrollo/IDE
+.idea/ # Para GoLand/IntelliJ IDEA
+.vscode/ # Para VS Code
+*.sublime-project
+*.sublime-workspace
+
+# Logs y bases de datos locales
+*.log
+*.sqlite3
+/data/ # Si tienes una carpeta de datos local
