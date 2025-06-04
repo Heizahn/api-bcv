@@ -16,7 +16,7 @@ import (
 
 var (
 	bcvMutex sync.Mutex
-	bcv      float64 = 97.4194
+	bcv      float64
 )
 
 func main() {
@@ -110,10 +110,8 @@ func fetchUSD() float64 {
 		}
 
 		if d > 0 {
-			
 			usd = d
 		} else {
-			usd = 97.4194
 			fmt.Println("Error: No se pudo obtener el valor del dólar")
 		}
 	})
@@ -121,7 +119,7 @@ func fetchUSD() float64 {
 	err := c.Visit("https://www.bcv.org.ve/")
 	if err != nil {
 		fmt.Println("Error:", err)
-		return 0
+		return 97.4194
 	}
 
 	return usd
