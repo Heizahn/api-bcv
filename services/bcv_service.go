@@ -53,6 +53,7 @@ func (service *BCVService) UpdateBCV() {
 	var fetchedBCVValue float64 
 	// time.Local es importante para que la fecha coincida con la zona horaria del servidor.
 	currentDayTimestamp := time.Now().In(time.Local) 
+	log.Print("Dia Actual: ", currentDayTimestamp)
 
 	if bcvTodayFromDB > 0 {
 		// Si se encontró un valor para hoy en la DB, usar ese valor.

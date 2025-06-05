@@ -24,6 +24,7 @@ func NewAPIHandlers(bcvServiceInstance *services.BCVService) *APIHandlers {
 
 // HandleRequest maneja la ruta raíz ("/") de la API, retornando el valor actual del BCV.
 func (apiHandler *APIHandlers) HandleRequest(httpResponseWriter http.ResponseWriter, httpRequest *http.Request) {
+	print("\nMOSTRAR EL VALOR DEL BCV")
 	currentBCVValue := apiHandler.BCVValueService.GetBCV()
 	
 	jsonResponse := models.Response{

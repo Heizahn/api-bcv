@@ -12,7 +12,7 @@ import (
 
 	// Dependencias externas
 	gorillaHandlers "github.com/gorilla/handlers" // Alias para el paquete gorilla/handlers
-	"github.com/robfig/cron/v3"
+	"github.com/robfig/cron"
 )
 
 func main() {
@@ -54,13 +54,10 @@ func main() {
 	log.Printf("Valor inicial del BCV establecido: %.4f\n", bcvPriceService.GetBCV())
 
 	// --- 5. Configurar Tarea Programada (Cron) para la Actualización Diaria del BCV ---
-	// Crea un nuevo planificador de tareas cron.
-	dailyPriceScheduler := cron.New() // Renombrado: 'shedule' -> 'dailyPriceScheduler'
-	// Programa la función UpdateBCV() del servicio BCV para que se ejecute
-	// todos los días a las 01:30:00 AM (hora local del servidor donde se ejecuta la app).
-	dailyPriceScheduler.AddFunc("0 30 1 * * *", bcvPriceService.UpdateBCV)
-	dailyPriceScheduler.Start() // Inicia el planificador.
-	log.Println("Tarea programada (cron) para actualizar BCV diariamente a las 01:30 AM iniciada.")
+	dailyPriceScheduler := cron.New()
+	dailyPriceScheduler.AddFunc("0 30 1 * * *", bcvPriceService.UpdateBCV) 
+	dailyPriceScheduler.Start()
+	log.Println("Con Activado")
 
 	// --- 6. Configurar CORS (Cross-Origin Resource Sharing) para la API ---
 	// Define las políticas de seguridad para permitir solicitudes de diferentes dominios.
@@ -89,7 +86,7 @@ func main() {
 	// Comienza a escuchar en el puerto configurado y a procesar las solicitudes entrantes.
 	// Se aplica la configuración de CORS a todas las rutas usando el multiplexor HTTP por defecto.
 	fmt.Printf("Servidor iniciado y escuchando en el puerto %s\n", appConfig.Port)
-	log.Fatal(http.ListenAndServe(":"+appConfig.Port, gorillaHandlers.CORS(corsAllowedOrigins, corsAllowedHeaders, corsAllowedMethods)(http.DefaultServeMux)))
+	http.ListenAndServe(":"+appConfig.Port, gorillaHandlers.CORS(corsAllowedOrigins, corsAllowedHeaders, corsAllowedMethods)(http.DefaultServeMux))
 	// log.Fatal es una función que, si ListenAndServe retorna un error (ej. el puerto ya está en uso),
 	// imprime el error y termina la aplicación.
 }

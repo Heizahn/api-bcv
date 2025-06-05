@@ -6,7 +6,7 @@ require (
 	github.com/gocolly/colly/v2 v2.1.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/joho/godotenv v1.5.1
-	github.com/robfig/cron/v3 v3.0.1
+	github.com/robfig/cron v1.2.0
 	go.mongodb.org/mongo-driver v1.17.3
 )
 
