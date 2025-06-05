@@ -51,7 +51,7 @@ func (ws *WhatsAppService) SendAlert(message string) error {
 		return fmt.Errorf("error al serializar cuerpo de la solicitud de WhatsApp: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", ws.apiURL, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequest("POST", ws.apiURL + '/send-text', bytes.NewBuffer(requestBody))
 	if err != nil {
 		return fmt.Errorf("error al crear solicitud HTTP para WhatsApp API: %w", err)
 	}
