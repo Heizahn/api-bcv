@@ -121,11 +121,13 @@ func (service *BCVService) fetchUSD() float64 {
 	// Define la lógica a ejecutar cuando Colly encuentra un elemento HTML con el ID "#dolar".
 	collyCollector.OnHTML("#dolar", func(element *colly.HTMLElement) {
 		// Extraer el texto del elemento y limpiarlo.
-		usdTextRaw := element.Text[101:108]
+		usdTextRaw := element.Text[101:109]
 		cleanedUSDText := strings.ReplaceAll(usdTextRaw, ",", ".") 
+
 
 		// Convertir el texto limpio a un valor float.
 		parsedUSD, parseError := strconv.ParseFloat(cleanedUSDText, 64) 
+
 		if parseError != nil {
 			log.Printf("Error al parsear float de BCV scrapeado '%s': %v. No se pudo obtener un valor válido.\n", cleanedUSDText, parseError)
 			scrapedUSDValue = 0.0 // Asegurar que sea 0.0 si hay un error de parseo.
