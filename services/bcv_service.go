@@ -127,6 +127,7 @@ func (service *BCVService) fetchUSD() float64 {
 
 		// Convertir el texto limpio a un valor float.
 		parsedUSD, parseError := strconv.ParseFloat(cleanedUSDText, 64) 
+		log.Printf("Valor scrapeado de USD: %s\n", cleanedUSDText)
 
 		if parseError != nil {
 			log.Printf("Error al parsear float de BCV scrapeado '%s': %v. No se pudo obtener un valor válido.\n", cleanedUSDText, parseError)
